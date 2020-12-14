@@ -1,0 +1,194 @@
+---
+title: "615 Final Project"
+author: "Donghao Xue"
+date: "14/12/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(lubridate)
+library(bizdays)
+library(tidyquant)
+```
+
+## Introduction
+
+In this project, I will use online investment advice that was available at the beginning of July 2020. to make investment decisions and then track my investments through the fall until 1 December. I choose three stocks and track the value of my portfolios.
+
+Three portfolios I made: 
+
+50% AAPL, 25% GOOG, 25% AMZN
+
+25% AAPL, 50% GOOG, 25% AMZN
+
+25% AAPL, 25% GOOG, 50% AMZN
+
+## EDA
+
+```{r}
+#get individual asset returns grouped by asset
+stock_returns <- c("AAPL", "GOOG", "AMZN") %>%
+  tq_get(get  = "stock.prices",
+         from = "2020-07-01",
+         to   = "2020-12-02") %>%
+  group_by(symbol) %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = periodReturn, 
+               period     = "daily", 
+               col_rename = "Ra")
+
+```
+
+```{r message=FALSE, warning=FALSE}
+#get baseline asset returns
+baseline_returns <- "XLK" %>%
+  tq_get(get  = "stock.prices",
+         from = "2020-07-01",
+         to   = "2020-12-02") %>%
+  tq_transmute(select     = adjusted, 
+               mutate_fun = periodReturn, 
+               period     = "daily", 
+               col_rename = "Rb")
+
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+stock_returns_multi <- stock_returns %>%
+    tq_repeat_df(n = 3)
+```
+
+### Weights table
+```{r}
+weights <- c(
+    0.50, 0.25, 0.25,
+    0.25, 0.50, 0.25,
+    0.25, 0.25, 0.50
+)
+stocks <- c("AAPL", "GOOG", "AMZN")
+weights_table <-  tibble(stocks) %>%
+    tq_repeat_df(n = 3) %>%
+    bind_cols(tibble(weights)) %>%
+    group_by(portfolio)
+
+weights_table
+
+```
+
+
+```{r}
+portfolio_returns_multi <- stock_returns_multi %>%
+    tq_portfolio(assets_col  = symbol, 
+                 returns_col = Ra, 
+                 weights     = weights_table, 
+                 col_rename  = "Ra")
+
+```
+
+
+
+```{r}
+portfolio_growth_multi <- stock_returns_multi %>%
+    tq_portfolio(assets_col   = symbol, 
+                 returns_col  = Ra, 
+                 weights      = weights_table, 
+                 col_rename   = "investment.growth",
+                 wealth.index = TRUE) %>%
+    mutate(investment.growth = investment.growth * 250000)
+
+```
+
+
+
+```{r message=FALSE, warning=FALSE}
+portfolio_growth_multi %>%
+    ggplot(aes(x = date, y = investment.growth, color = factor(portfolio))) +
+    geom_line(size = 2) +
+    labs(title = "Portfolio Growth",
+         subtitle = "Comparing Multiple Portfolios",
+         x = "", y = "Portfolio Value",
+         color = "Portfolio") +
+    geom_smooth(method = "loess") +
+    theme_tq() +
+    scale_color_tq() +
+    scale_y_continuous(labels = scales::dollar)
+
+```
+
+
+
+### CAPM table
+```{r}
+RaRb_multiple_portfolio <- left_join(portfolio_returns_multi, 
+                                     baseline_returns,
+                                     by = "date")
+
+```
+
+
+```{r}
+#create the CAPM table of multiple portfolios
+RaRb_multiple_portfolio %>%
+    tq_performance(Ra = Ra, Rb = Rb, performance_fun = table.CAPM)
+
+```
+
+The annual Alpha value for the three portfolios are 7%, 7% and -2% seperately.
+
+## Analysis
+```{r}
+#Calculate profit and return rate of three multiple portfolios
+d = which(portfolio_growth_multi$date == "2020-12-01")
+profit1 = portfolio_growth_multi$investment.growth[d[1]] - 250000
+profit2 = portfolio_growth_multi$investment.growth[d[2]] - 250000
+profit3 = portfolio_growth_multi$investment.growth[d[3]] - 250000
+
+rate_of_return_1 = profit1/250000
+rate_of_return_2 = profit2/250000
+rate_of_return_3 = profit3/250000
+
+print(cbind(profit1, profit2, profit3))
+
+print(cbind(rate_of_return_1, rate_of_return_2, rate_of_return_3))
+```
+
+## Conclusion 
+
+For the three portfolios, I will choose the first one because it has the highest return rate and profit.
+
+
+## Reference
+
+Data is from : finance.yahoo.com
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
